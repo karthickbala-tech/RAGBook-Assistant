@@ -11,6 +11,8 @@ app = Flask(__name__)
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+conversation_memory = {}
+
 def classify_intent(message: str) -> str:
     with open("prompts/intent_prompt.txt", "r") as f:
         prompt = f.read()
@@ -29,10 +31,15 @@ def classify_intent(message: str) -> str:
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json()
+
     user_message = data.get("message")
+    session_id = data.get("session_id", "default")
 
     if not user_message:
         return jsonify({"error": "Message required"}), 400
+
+    if session_id not in conversation_memory:
+        conversation_memory[session_id] = []
 
     intent = classify_intent(user_message)
 
@@ -50,20 +57,34 @@ def chat():
         with open("prompts/system_prompt.txt", "r") as f:
             system_prompt = f.read()
 
+    messages = [
+        {"role": "system", "content": system_prompt}
+    ]
+
+    messages.extend(conversation_memory[session_id][-4:])
+
+    messages.append({
+        "role": "user",
+        "content": f"Book Data:\n{book_context}\n\nQuestion:\n{user_message}"
+    })
+
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"Book Data:\n{book_context}\n\nQuestion:\n{user_message}"
-            }
-        ],
+        messages=messages,
         temperature=0.5
     )
 
+    assistant_reply = response.choices[0].message.content
+
+    conversation_memory[session_id].append(
+        {"role": "user", "content": user_message}
+    )
+    conversation_memory[session_id].append(
+        {"role": "assistant", "content": assistant_reply}
+    )
+
     return jsonify({
-        "reply": response.choices[0].message.content
+        "reply": assistant_reply
     })
 
 if __name__ == "__main__":

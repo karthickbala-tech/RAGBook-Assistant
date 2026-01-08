@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -86,6 +86,11 @@ def chat():
     return jsonify({
         "reply": assistant_reply
     })
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
 
 if __name__ == "__main__":
     app.run(debug=True)
